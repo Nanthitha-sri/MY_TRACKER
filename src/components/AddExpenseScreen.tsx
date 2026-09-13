@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { Category, ScreenType, ExpenseRecord } from '../types';
-import { playWaterDrop, playOceanChime } from '../utils/audio';
+import { audioManager } from '../utils/audio';
 
 interface AddExpenseScreenProps {
   categories: Category[];
   initialCategoryId?: string;
   activeYear: number;
   activeMonth: number;
-  onAddExpense: (expense: ExpenseRecord) => void;
+  onAddExpense: (expense: ExpenseRecord) => Promise<void> | void;
   onNavigate: (screen: ScreenType) => void;
-  soundEnabled: boolean;
+  soundEnabled?: boolean;
 }
 
 export const AddExpenseScreen: React.FC<AddExpenseScreenProps> = ({
@@ -19,7 +19,6 @@ export const AddExpenseScreen: React.FC<AddExpenseScreenProps> = ({
   activeMonth,
   onAddExpense,
   onNavigate,
-  soundEnabled,
 }) => {
   const getDefaultDate = () => {
     const y = activeYear || 2026;
@@ -37,6 +36,7 @@ export const AddExpenseScreen: React.FC<AddExpenseScreenProps> = ({
   const [note, setNote] = useState('');
   const [dateStr, setDateStr] = useState(getDefaultDate);
   const [justSaved, setJustSaved] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Reset form whenever opening with a new category or month
   useEffect(() => {
@@ -51,26 +51,32 @@ export const AddExpenseScreen: React.FC<AddExpenseScreenProps> = ({
   const quickNotes = ['Skincare', 'Coffee', 'Groceries', 'Books', 'Dining', 'Uber/Metro'];
 
   const handleKeypad = (val: string) => {
-    if (soundEnabled) playWaterDrop();
-
     if (val === 'backspace') {
+      audioManager.play('keypadDelete');
       setAmountStr((prev) => (prev.length > 1 ? prev.slice(0, -1) : ''));
+    } else if (val === 'clear') {
+      audioManager.play('keypadClear');
+      setAmountStr('');
     } else if (val === '.') {
+      audioManager.play('keypadTap');
       if (!amountStr.includes('.')) {
         setAmountStr((prev) => (prev ? prev + '.' : '0.'));
       }
     } else {
       // Numerical digit
+      audioManager.play('keypadTap');
       setAmountStr((prev) => (prev === '0' || prev === '' ? val : prev + val));
     }
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    if (isSaving) return;
+
     const amt = parseFloat(amountStr || '0');
+    // Important: Do not play success sound if validation fails
     if (!amt || isNaN(amt) || amt <= 0) return;
 
-    if (soundEnabled) playOceanChime();
-    setJustSaved(true);
+    setIsSaving(true);
 
     const newExpense: ExpenseRecord = {
       id: `exp-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
@@ -82,19 +88,27 @@ export const AddExpenseScreen: React.FC<AddExpenseScreenProps> = ({
       createdAt: new Date().toISOString(),
     };
 
-    onAddExpense(newExpense);
+    try {
+      // Must await persistence BEFORE triggering success state and audio
+      await onAddExpense(newExpense);
 
-    // Bug 4: Reset all fields after submission so subsequent openings start clean
-    setAmountStr('');
-    setNote('');
-    setPaymentMethod('UPI');
-    setSelectedCatId(initialCategoryId || 'home');
-    setDateStr(getDefaultDate());
+      setJustSaved(true);
 
-    setTimeout(() => {
-      setJustSaved(false);
-      onNavigate('home');
-    }, 400);
+      // Bug 4: Reset all fields after submission so subsequent openings start clean
+      setAmountStr('');
+      setNote('');
+      setPaymentMethod('UPI');
+      setSelectedCatId(initialCategoryId || 'home');
+      setDateStr(getDefaultDate());
+
+      setTimeout(() => {
+        setJustSaved(false);
+        setIsSaving(false);
+        onNavigate('home');
+      }, 400);
+    } catch {
+      setIsSaving(false);
+    }
   };
 
   const displayAmount = amountStr || '0';
@@ -107,11 +121,11 @@ export const AddExpenseScreen: React.FC<AddExpenseScreenProps> = ({
           <button
             type="button"
             onClick={() => {
-              if (soundEnabled) playWaterDrop();
+              audioManager.play('buttonTap');
               onNavigate('home');
             }}
             aria-label="Back"
-            className="absolute left-0 p-1 text-sky-200 active:scale-95 transition-transform"
+            className="absolute left-0 p-1 text-sky-200 active:scale-95 transition-transform cursor-pointer"
           >
             <span className="material-symbols-outlined text-2xl">arrow_back_ios_new</span>
           </button>
@@ -160,12 +174,12 @@ export const AddExpenseScreen: React.FC<AddExpenseScreenProps> = ({
                 key={cat.id}
                 type="button"
                 onClick={() => {
-                  if (soundEnabled) playWaterDrop();
+                  audioManager.play('buttonTap');
                   setSelectedCatId(cat.id);
                 }}
                 className={`${
                   isActive ? 'glass-card-active' : 'glass-card hover:bg-white/10'
-                } rounded-xl py-2 px-3 flex items-center space-x-2.5 transition active:scale-98 text-left`}
+                } rounded-xl py-2 px-3 flex items-center space-x-2.5 transition active:scale-98 text-left cursor-pointer`}
               >
                 <span className="text-lg">{cat.icon}</span>
                 <span
@@ -200,13 +214,14 @@ export const AddExpenseScreen: React.FC<AddExpenseScreenProps> = ({
           <button
             type="button"
             onClick={() => {
+              audioManager.play('buttonTap');
               const today = new Date();
               const y = today.getFullYear();
               const m = String(today.getMonth() + 1).padStart(2, '0');
               const d = String(today.getDate()).padStart(2, '0');
               setDateStr(`${y}-${m}-${d}`);
             }}
-            className="px-2.5 py-1.5 rounded-xl bg-cyan-950/70 border border-cyan-400/30 text-[10px] text-cyan-200 font-bold hover:bg-cyan-900/70 active:scale-95 transition"
+            className="px-2.5 py-1.5 rounded-xl bg-cyan-950/70 border border-cyan-400/30 text-[10px] text-cyan-200 font-bold hover:bg-cyan-900/70 active:scale-95 transition cursor-pointer"
           >
             Today
           </button>
@@ -227,12 +242,12 @@ export const AddExpenseScreen: React.FC<AddExpenseScreenProps> = ({
                 key={method}
                 type="button"
                 onClick={() => {
-                  if (soundEnabled) playWaterDrop();
+                  audioManager.play('buttonTap');
                   setPaymentMethod(method);
                 }}
                 className={`${
                   isSelected ? 'glass-card-active' : 'glass-card active:bg-white/10'
-                } rounded-xl py-1.5 flex flex-col items-center justify-center space-y-0.5 transition`}
+                } rounded-xl py-1.5 flex flex-col items-center justify-center space-y-0.5 transition cursor-pointer`}
               >
                 <span className="text-[11px] font-semibold text-white">{method}</span>
               </button>
@@ -260,10 +275,10 @@ export const AddExpenseScreen: React.FC<AddExpenseScreenProps> = ({
               key={q}
               type="button"
               onClick={() => {
-                if (soundEnabled) playWaterDrop();
+                audioManager.play('buttonTap');
                 setNote(q);
               }}
-              className="text-[10px] whitespace-nowrap px-2.5 py-0.5 rounded-full bg-cyan-950/60 border border-cyan-400/20 text-cyan-200 hover:bg-cyan-900/60 active:scale-95 transition"
+              className="text-[10px] whitespace-nowrap px-2.5 py-0.5 rounded-full bg-cyan-950/60 border border-cyan-400/20 text-cyan-200 hover:bg-cyan-900/60 active:scale-95 transition cursor-pointer"
             >
               {q}
             </button>

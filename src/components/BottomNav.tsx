@@ -1,20 +1,19 @@
 import React from 'react';
 import { ScreenType } from '../types';
-import { playWaterDrop } from '../utils/audio';
+import { audioManager } from '../utils/audio';
 
 interface BottomNavProps {
   currentScreen: ScreenType;
   onNavigate: (screen: ScreenType) => void;
-  soundEnabled: boolean;
+  soundEnabled?: boolean;
 }
 
 export const BottomNav: React.FC<BottomNavProps> = ({
   currentScreen,
   onNavigate,
-  soundEnabled,
 }) => {
   const handleNav = (screen: ScreenType) => {
-    if (soundEnabled) playWaterDrop();
+    audioManager.play('tabChange');
     onNavigate(screen);
   };
 

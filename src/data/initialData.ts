@@ -79,9 +79,24 @@ export const initialCategories: Category[] = [
 ];
 
 export const defaultSettings: SettingsState = {
+  masterSound: true,
+  oceanAmbience: true,
+  oceanVolume: 25,
+  ambientEffects: true,
+  fishSounds: true,
+  bubbleSounds: true,
+  whaleSounds: true,
+  interactionSounds: true,
+  tabSounds: true,
+  keypadSounds: true,
+  expenseSounds: true,
+  waterRipple: true,
+  budgetWarning: true,
+  hapticFeedback: true,
+
+  // Compatibility aliases
   soundHaptic: true,
   buttonSound: true,
   expenseAddedSound: true,
   budgetWarningSound: true,
-  hapticFeedback: true,
 };

@@ -67,9 +67,29 @@ export interface Category {
 export type ScreenType = 'home' | 'add-expense' | 'category' | 'insights' | 'settings' | 'month-history';
 
 export interface SettingsState {
-  soundHaptic: boolean;
-  buttonSound: boolean;
-  expenseAddedSound: boolean;
-  budgetWarningSound: boolean;
+  // Master switch
+  masterSound: boolean;
+
+  // Layer A: Continuous Ocean Ambience & Natural Effects
+  oceanAmbience: boolean;
+  oceanVolume: number; // 0–100 (percentage, default ~25)
+  ambientEffects: boolean;
+  fishSounds: boolean;
+  bubbleSounds: boolean;
+  whaleSounds: boolean;
+
+  // Layer B: Interaction & Event Sounds
+  interactionSounds: boolean;
+  tabSounds: boolean;
+  keypadSounds: boolean;
+  expenseSounds: boolean;
+  waterRipple: boolean;
+  budgetWarning: boolean;
   hapticFeedback: boolean;
+
+  // Backward compatibility alias properties
+  soundHaptic?: boolean;
+  buttonSound?: boolean;
+  expenseAddedSound?: boolean;
+  budgetWarningSound?: boolean;
 }
