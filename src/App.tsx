@@ -13,15 +13,15 @@ import {
   getAllDiscoveredMonths,
   getMonthlySummary,
   addExpense,
+  updateExpense,
   deleteExpense,
   setCategoryBudget,
-  getDeviceYearMonth,
+  resetDatabase,
 } from './db/indexedDB';
 
 const STORAGE_KEY_SETTINGS = 'good_day_ocean_settings_v3';
 
 export default function App() {
-  const deviceNow = getDeviceYearMonth();
   const [activeYear, setActiveYear] = useState<number>(() => {
     if (typeof window !== 'undefined') {
       const saved = sessionStorage.getItem('nanz_active_year');
@@ -30,7 +30,7 @@ export default function App() {
         if (!isNaN(parsed) && parsed > 2000) return parsed;
       }
     }
-    return deviceNow.year;
+    return 2026;
   });
 
   const [activeMonth, setActiveMonth] = useState<number>(() => {
@@ -41,12 +41,12 @@ export default function App() {
         if (!isNaN(parsed) && parsed >= 1 && parsed <= 12) return parsed;
       }
     }
-    return deviceNow.month;
+    return 9;
   });
 
   const [monthlySummary, setMonthlySummary] = useState<MonthlySummary | null>(null);
   const [availableMonths, setAvailableMonths] = useState<string[]>(['2026-09']);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [, setIsLoading] = useState<boolean>(true);
 
   const [settings, setSettings] = useState<SettingsState>(() => {
     if (typeof window !== 'undefined') {
@@ -120,6 +120,8 @@ export default function App() {
           fullDate: t.date,
           mode: t.paymentMethod,
           note: t.note,
+          categoryId: t.categoryId,
+          createdAt: t.createdAt,
         };
       });
 
@@ -142,6 +144,29 @@ export default function App() {
       // If user logged an expense in a different month, switch to that month
       setActiveYear(expYear);
       setActiveMonth(expMonth);
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('nanz_active_year', expYear.toString());
+        sessionStorage.setItem('nanz_active_month', expMonth.toString());
+      }
+    } else {
+      await refreshMonthData(activeYear, activeMonth);
+    }
+  };
+
+  const handleUpdateExpense = async (updatedExpense: ExpenseRecord) => {
+    await updateExpense(updatedExpense);
+    const parts = updatedExpense.date.split('-');
+    const expYear = parseInt(parts[0], 10);
+    const expMonth = parseInt(parts[1], 10);
+
+    if (expYear && expMonth && (expYear !== activeYear || expMonth !== activeMonth)) {
+      // If user changed the expense date to a different month, navigate to that month
+      setActiveYear(expYear);
+      setActiveMonth(expMonth);
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('nanz_active_year', expYear.toString());
+        sessionStorage.setItem('nanz_active_month', expMonth.toString());
+      }
     } else {
       await refreshMonthData(activeYear, activeMonth);
     }
@@ -167,6 +192,7 @@ export default function App() {
   };
 
   const handleResetData = async () => {
+    await resetDatabase();
     setSettings(defaultSettings);
     try {
       localStorage.removeItem(STORAGE_KEY_SETTINGS);
@@ -213,11 +239,13 @@ export default function App() {
       {currentScreen === 'category' && (
         <CategoryDetailScreen
           category={activeCategory}
+          categories={categories}
           activeYear={activeYear}
           activeMonth={activeMonth}
           onEditBudget={handleEditBudget}
           onDeleteTransaction={handleDeleteTransaction}
           onAddExpense={handleAddExpense}
+          onUpdateExpense={handleUpdateExpense}
           onNavigate={setCurrentScreen}
           soundEnabled={settings.buttonSound}
         />

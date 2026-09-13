@@ -34,7 +34,7 @@ export const MONTH_NAMES = [
 ];
 
 const DB_NAME = 'OceanBudgetDB';
-const DB_VERSION = 1;
+const DB_VERSION = 2; // Incremented for clean migration & legacy demo data purging
 const EXPENSES_STORE = 'expenses';
 const BUDGETS_STORE = 'monthly_budgets';
 
@@ -148,15 +148,13 @@ export async function ensureMonthInitialized(year: number, month: number): Promi
           initializedAt: new Date().toISOString(),
           createdAt: new Date().toISOString(),
         };
-        const putReq = store.put(record);
-        putReq.onsuccess = () => resolve();
-        putReq.onerror = () => reject(putReq.error);
-      } else {
-        resolve();
+        store.put(record);
       }
     };
 
-    getReq.onerror = () => reject(getReq.error);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
   });
 }
 
@@ -208,6 +206,7 @@ export async function getExpensesByCategory(
 /**
  * Add a new expense into persistent storage.
  * The expense date strictly determines which month the expense belongs to.
+ * Atomic commit ensures changes are persisted before resolving.
  */
 export async function addExpense(expense: ExpenseRecord): Promise<void> {
   const db = await openDB();
@@ -223,21 +222,29 @@ export async function addExpense(expense: ExpenseRecord): Promise<void> {
 
     const record = {
       ...expense,
+      amount: Number(expense.amount),
       yearMonth,
     };
 
-    const request = store.put(record);
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
+    store.put(record);
+
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
   });
 }
 
 /**
- * Update an existing expense
+ * Update an existing expense using its unique ID.
+ * Updates the existing record in-place; does not duplicate or recreate old records.
+ * If date was changed, updates yearMonth index accordingly so it moves to that month.
  */
 export async function updateExpense(expense: ExpenseRecord): Promise<void> {
   const db = await openDB();
   const yearMonth = expense.date.substring(0, 7);
+  const { year, month } = parseYearMonth(yearMonth);
+
+  await ensureMonthInitialized(year, month);
 
   return new Promise((resolve, reject) => {
     const tx = db.transaction([EXPENSES_STORE], 'readwrite');
@@ -245,17 +252,21 @@ export async function updateExpense(expense: ExpenseRecord): Promise<void> {
 
     const record = {
       ...expense,
+      amount: Number(expense.amount),
       yearMonth,
     };
 
-    const request = store.put(record);
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
+    store.put(record);
+
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
   });
 }
 
 /**
- * Delete an expense by ID or record
+ * Delete an expense by ID or record.
+ * Atomic commit ensures deletion is committed to disk before resolving.
  */
 export async function deleteExpense(expenseOrId: string | ExpenseRecord): Promise<void> {
   const db = await openDB();
@@ -265,9 +276,11 @@ export async function deleteExpense(expenseOrId: string | ExpenseRecord): Promis
     const tx = db.transaction([EXPENSES_STORE], 'readwrite');
     const store = tx.objectStore(EXPENSES_STORE);
 
-    const request = store.delete(id);
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
+    store.delete(id);
+
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
   });
 }
 
@@ -304,6 +317,7 @@ export async function getMonthlyBudgets(year: number, month: number): Promise<Re
 /**
  * Set category budget for a specific month.
  * Modifying a budget for one month NEVER changes another month's historical budget.
+ * Uses atomic transaction commit.
  */
 export async function setCategoryBudget(
   year: number,
@@ -317,7 +331,7 @@ export async function setCategoryBudget(
 
   const updatedBudgets = {
     ...currentBudgets,
-    [categoryId]: newBudget,
+    [categoryId]: Number(newBudget),
   };
 
   return new Promise((resolve, reject) => {
@@ -330,9 +344,11 @@ export async function setCategoryBudget(
       updatedAt: new Date().toISOString(),
     };
 
-    const request = store.put(record);
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
+    store.put(record);
+
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
   });
 }
 
@@ -486,92 +502,53 @@ export async function getAllDiscoveredMonths(): Promise<string[]> {
 }
 
 /**
- * Seed initial real expense data for September 2026 once if empty
+ * Clean up any legacy development/demo seed records if present in the database.
+ * Does NOT delete real user expenses.
  */
-export async function seedInitialDataIfEmpty(): Promise<void> {
+export async function cleanupDemoDataIfPresent(): Promise<void> {
   const db = await openDB();
 
   return new Promise((resolve, reject) => {
-    const tx = db.transaction([EXPENSES_STORE], 'readonly');
+    const tx = db.transaction([EXPENSES_STORE], 'readwrite');
     const store = tx.objectStore(EXPENSES_STORE);
-    const countReq = store.count();
+    const req = store.openCursor();
+    const demoIds = new Set(['h1', 'p1', 's1', 'se1', 'r1', 'rem1']);
 
-    countReq.onsuccess = async () => {
-      if (countReq.result === 0) {
-        // Seed actual September 2026 expenses
-        const initialExpenses: ExpenseRecord[] = [
-          {
-            id: 'exp-sep-home-1',
-            amount: 4000,
-            categoryId: 'home',
-            date: '2026-09-13',
-            paymentMethod: 'UPI',
-            note: 'Expense',
-            createdAt: '2026-09-13T10:00:00',
-          },
-          {
-            id: 'exp-sep-pg-1',
-            amount: 4250,
-            categoryId: 'pg',
-            date: '2026-09-13',
-            paymentMethod: 'UPI',
-            note: 'PG Advance & Maintenance',
-            createdAt: '2026-09-13T10:30:00',
-          },
-          {
-            id: 'exp-sep-selfcare-1',
-            amount: 400,
-            categoryId: 'self-care',
-            date: '2026-09-13',
-            paymentMethod: 'UPI',
-            note: 'Skincare & Wellness',
-            createdAt: '2026-09-13T11:15:00',
-          },
-          {
-            id: 'exp-sep-selfexpenses-1',
-            amount: 350,
-            categoryId: 'self-expenses',
-            date: '2026-09-13',
-            paymentMethod: 'UPI',
-            note: 'Coffee & Journal Book',
-            createdAt: '2026-09-13T12:00:00',
-          },
-          {
-            id: 'exp-sep-recharge-1',
-            amount: 299,
-            categoryId: 'recharge',
-            date: '2026-09-13',
-            paymentMethod: 'UPI',
-            note: 'Mobile Unlimited Data',
-            createdAt: '2026-09-13T14:20:00',
-          },
-          {
-            id: 'exp-sep-rem-1',
-            amount: 500,
-            categoryId: 'rem',
-            date: '2026-09-13',
-            paymentMethod: 'UPI',
-            note: 'Voyage Emergency Reserve',
-            createdAt: '2026-09-13T15:45:00',
-          },
-        ];
-
-        for (const exp of initialExpenses) {
-          await addExpense(exp);
+    req.onsuccess = (e) => {
+      const cursor = (e.target as IDBRequest).result as IDBCursorWithValue;
+      if (cursor) {
+        const id = String(cursor.key);
+        // Clean out legacy demo seeded IDs from development
+        if (id.startsWith('exp-sep-') || demoIds.has(id)) {
+          cursor.delete();
         }
-
-        // Initialize 2026-09 budget
-        await ensureMonthInitialized(2026, 9);
+        cursor.continue();
       }
-      resolve();
     };
 
-    countReq.onerror = () => reject(countReq.error);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
   });
 }
 
 /**
+ * Initialize database with default budget template if empty.
+ * Zero fake or demo expenses are inserted.
+ */
+export async function seedInitialDataIfEmpty(): Promise<void> {
+  // Purge any legacy demo data that might exist in browser storage
+  await cleanupDemoDataIfPresent();
+
+  // Ensure default budget configurations exist for September 2026 and current device month
+  await ensureMonthInitialized(2026, 9);
+  const device = getDeviceYearMonth();
+  await ensureMonthInitialized(device.year, device.month);
+}
+
+/**
  * Reset database to default initial state (used by Settings Reset)
+ * Resets budgets to default configuration and clears all expenses (0 expenses, 0 spent).
  */
 export async function resetDatabase(): Promise<void> {
   const db = await openDB();
@@ -590,5 +567,6 @@ export async function resetDatabase(): Promise<void> {
     };
 
     tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
   });
 }

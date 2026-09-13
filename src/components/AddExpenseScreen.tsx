@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Category, ScreenType, ExpenseRecord } from '../types';
 import { playWaterDrop, playOceanChime } from '../utils/audio';
 
@@ -21,24 +21,32 @@ export const AddExpenseScreen: React.FC<AddExpenseScreenProps> = ({
   onNavigate,
   soundEnabled,
 }) => {
-  const [amountStr, setAmountStr] = useState('300');
-  const [selectedCatId, setSelectedCatId] = useState(initialCategoryId || 'home');
-  const [paymentMethod, setPaymentMethod] = useState('UPI');
-  const [note, setNote] = useState('');
-  const [justSaved, setJustSaved] = useState(false);
-
   const getDefaultDate = () => {
     const y = activeYear || 2026;
     const m = String(activeMonth || 9).padStart(2, '0');
     const today = new Date();
     const isCurrentYearMonth = today.getFullYear() === y && today.getMonth() + 1 === (activeMonth || 9);
-    const d = isCurrentYearMonth
-      ? String(today.getDate()).padStart(2, '0')
-      : '01';
+    const d = isCurrentYearMonth ? String(today.getDate()).padStart(2, '0') : '01';
     return `${y}-${m}-${d}`;
   };
 
+  // Bug 3 & 4: Start with empty amount string, displaying ₹0
+  const [amountStr, setAmountStr] = useState('');
+  const [selectedCatId, setSelectedCatId] = useState(initialCategoryId || 'home');
+  const [paymentMethod, setPaymentMethod] = useState('UPI');
+  const [note, setNote] = useState('');
   const [dateStr, setDateStr] = useState(getDefaultDate);
+  const [justSaved, setJustSaved] = useState(false);
+
+  // Reset form whenever opening with a new category or month
+  useEffect(() => {
+    setAmountStr('');
+    setSelectedCatId(initialCategoryId || 'home');
+    setPaymentMethod('UPI');
+    setNote('');
+    setDateStr(getDefaultDate());
+    setJustSaved(false);
+  }, [initialCategoryId, activeYear, activeMonth]);
 
   const quickNotes = ['Skincare', 'Coffee', 'Groceries', 'Books', 'Dining', 'Uber/Metro'];
 
@@ -46,16 +54,19 @@ export const AddExpenseScreen: React.FC<AddExpenseScreenProps> = ({
     if (soundEnabled) playWaterDrop();
 
     if (val === 'backspace') {
-      setAmountStr((prev) => (prev.length > 1 ? prev.slice(0, -1) : '0'));
+      setAmountStr((prev) => (prev.length > 1 ? prev.slice(0, -1) : ''));
     } else if (val === '.') {
-      if (!amountStr.includes('.')) setAmountStr((prev) => prev + '.');
+      if (!amountStr.includes('.')) {
+        setAmountStr((prev) => (prev ? prev + '.' : '0.'));
+      }
     } else {
-      setAmountStr((prev) => (prev === '0' ? val : prev + val));
+      // Numerical digit
+      setAmountStr((prev) => (prev === '0' || prev === '' ? val : prev + val));
     }
   };
 
   const handleSubmit = () => {
-    const amt = parseFloat(amountStr);
+    const amt = parseFloat(amountStr || '0');
     if (!amt || isNaN(amt) || amt <= 0) return;
 
     if (soundEnabled) playOceanChime();
@@ -73,10 +84,20 @@ export const AddExpenseScreen: React.FC<AddExpenseScreenProps> = ({
 
     onAddExpense(newExpense);
 
+    // Bug 4: Reset all fields after submission so subsequent openings start clean
+    setAmountStr('');
+    setNote('');
+    setPaymentMethod('UPI');
+    setSelectedCatId(initialCategoryId || 'home');
+    setDateStr(getDefaultDate());
+
     setTimeout(() => {
+      setJustSaved(false);
       onNavigate('home');
     }, 400);
   };
+
+  const displayAmount = amountStr || '0';
 
   return (
     <div className="flex-1 flex flex-col justify-between overflow-y-auto no-scrollbar text-white pb-3 select-none bg-gradient-to-b from-[#051426] via-[#0c2b4c] to-[#1c2936]">
@@ -120,7 +141,7 @@ export const AddExpenseScreen: React.FC<AddExpenseScreenProps> = ({
               <div className="bg-slate-950/80 backdrop-blur-md px-4 py-1 rounded-full border border-sky-300/40 shadow-lg flex items-center justify-center text-white tracking-tight">
                 <span className="text-2xl font-semibold leading-none text-cyan-200">₹</span>
                 <span className="text-3xl font-bold leading-none tracking-tight ml-1 text-white">
-                  {amountStr}
+                  {displayAmount}
                 </span>
                 <span className="typing-cursor" />
               </div>
@@ -262,7 +283,7 @@ export const AddExpenseScreen: React.FC<AddExpenseScreenProps> = ({
           }`}
         >
           <span className="font-semibold text-sm text-white tracking-wide drop-shadow-sm">
-            {justSaved ? 'Saved! ✨' : `Save Expense (₹${amountStr})`}
+            {justSaved ? 'Saved! ✨' : `Save Expense (₹${displayAmount})`}
           </span>
           <span className="absolute right-4 text-xl">🐚</span>
         </button>

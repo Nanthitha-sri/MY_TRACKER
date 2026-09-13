@@ -15,6 +15,8 @@ export interface Transaction {
   mode: string;
   amount: number;
   fullDate?: string; // e.g. "2026-09-12"
+  categoryId?: string;
+  createdAt?: string;
 }
 
 export interface CategorySummary {

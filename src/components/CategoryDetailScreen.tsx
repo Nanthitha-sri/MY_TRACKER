@@ -1,27 +1,31 @@
-import React, { useState } from 'react';
-import { Category, ScreenType, ExpenseRecord } from '../types';
+import React, { useState, useEffect } from 'react';
+import { Category, ScreenType, ExpenseRecord, Transaction } from '../types';
 import { playWaterDrop, playOceanChime } from '../utils/audio';
 import { CategoryVisualizer } from './CategoryVisualizers';
 import { getMonthDisplayName } from '../db/indexedDB';
 
 interface CategoryDetailScreenProps {
   category: Category;
+  categories: Category[];
   activeYear: number;
   activeMonth: number;
   onEditBudget: (catId: string, newBudget: number) => void;
   onDeleteTransaction: (catId: string, txId: string) => void;
   onAddExpense: (expense: ExpenseRecord) => void;
+  onUpdateExpense: (updatedExpense: ExpenseRecord) => Promise<void> | void;
   onNavigate: (screen: ScreenType) => void;
   soundEnabled: boolean;
 }
 
 export const CategoryDetailScreen: React.FC<CategoryDetailScreenProps> = ({
   category,
+  categories,
   activeYear,
   activeMonth,
   onEditBudget,
   onDeleteTransaction,
   onAddExpense,
+  onUpdateExpense,
   onNavigate,
   soundEnabled,
 }) => {
@@ -31,6 +35,20 @@ export const CategoryDetailScreen: React.FC<CategoryDetailScreenProps> = ({
   const [quickAmount, setQuickAmount] = useState('');
   const [quickNote, setQuickNote] = useState('');
   const [quickMode, setQuickMode] = useState('UPI');
+
+  // Edit Expense State (Bug 1, 9, 10)
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingTx, setEditingTx] = useState<Transaction | null>(null);
+  const [editAmount, setEditAmount] = useState('');
+  const [editCategoryId, setEditCategoryId] = useState('');
+  const [editDate, setEditDate] = useState('');
+  const [editMode, setEditMode] = useState('UPI');
+  const [editNote, setEditNote] = useState('');
+
+  // Sync budget input when category.budget updates from IndexedDB
+  useEffect(() => {
+    setNewBudgetVal(category.budget.toString());
+  }, [category.budget]);
 
   const getDefaultDate = () => {
     const y = activeYear || 2026;
@@ -81,6 +99,40 @@ export const CategoryDetailScreen: React.FC<CategoryDetailScreenProps> = ({
     setQuickAmount('');
     setQuickNote('');
     setShowAddModal(false);
+  };
+
+  const handleOpenEditModal = (tx: Transaction) => {
+    setEditingTx(tx);
+    setEditAmount(tx.amount.toString());
+    setEditCategoryId(tx.categoryId || category.id);
+    setEditDate(tx.fullDate || getDefaultDate());
+    setEditMode(tx.mode || 'UPI');
+    setEditNote(tx.note || '');
+    setShowEditModal(true);
+  };
+
+  const handleSaveEditedExpense = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingTx) return;
+
+    const amt = parseFloat(editAmount);
+    if (!amt || isNaN(amt) || amt <= 0) return;
+
+    if (soundEnabled) playOceanChime();
+
+    const updatedExpense: ExpenseRecord = {
+      id: editingTx.id,
+      amount: amt,
+      categoryId: editCategoryId || category.id,
+      date: editDate,
+      paymentMethod: editMode,
+      note: editNote.trim() || 'Expense',
+      createdAt: editingTx.createdAt || new Date().toISOString(),
+    };
+
+    onUpdateExpense(updatedExpense);
+    setShowEditModal(false);
+    setEditingTx(null);
   };
 
   return (
@@ -150,100 +202,81 @@ export const CategoryDetailScreen: React.FC<CategoryDetailScreenProps> = ({
         <div className="flex flex-col items-center">
           <CategoryVisualizer
             categoryId={category.id}
-            pctLeft={pctLeft}
-            size="lg"
-            image={category.image}
-            creatureImg={category.creatureImg}
-            icon={category.icon}
+            percentageUsed={pctUsed}
+            percentageLeft={pctLeft}
+            spent={category.spent}
+            budget={category.budget}
           />
-          <div className="w-32 h-2.5 rounded-full bg-cyan-400/30 blur-sm mt-1" />
         </div>
 
-        {/* Metrics Breakdown */}
-        <div className="flex-1 pl-6 flex flex-col justify-center space-y-3.5">
-          <div>
-            <span className="text-base font-bold text-slate-300 tracking-tight">
-              ₹{category.budget.toLocaleString()}
+        {/* Right Side: Money Left and Spent Pill */}
+        <div className="flex-1 flex flex-col items-end justify-center pl-4">
+          <div className="text-right">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-cyan-300/80 block">
+              Left to spend
             </span>
-            <p className="text-[11px] text-slate-400 font-medium">Budget</p>
-          </div>
-
-          <div className="p-2.5 rounded-xl bg-cyan-950/60 border border-cyan-400/30 shadow-md">
-            <div className="flex items-baseline space-x-1">
-              <span className="text-2xl font-extrabold text-cyan-200 glow-cyan-text">
-                ₹{remaining.toLocaleString()}
+            <span className="text-3xl font-extrabold tracking-tight text-white drop-shadow-[0_2px_10px_rgba(0,195,255,0.4)]">
+              ₹{remaining.toLocaleString()}
+            </span>
+            <div className="mt-2 flex items-center justify-end space-x-1.5">
+              <span className="inline-block w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+              <span className="text-xs font-semibold text-cyan-200/90">
+                ₹{category.spent.toLocaleString()} spent ({pctUsed}%)
               </span>
             </div>
-            <p className="text-[11px] text-sky-300 font-semibold tracking-wide flex items-center gap-1">
-              Left{' '}
-              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping inline-block" />
-            </p>
-          </div>
-
-          <div>
-            <span className="text-base font-bold text-slate-300 tracking-tight">
-              ₹{category.spent.toLocaleString()}
+            <span className="text-[10px] text-cyan-300/60 block mt-0.5">
+              {pctLeft}% water remaining
             </span>
-            <p className="text-[11px] text-slate-400 font-medium">Spent</p>
           </div>
         </div>
       </section>
 
-      {/* FEATURE 1: Progress Bar matching screenshot */}
-      <section className="space-y-1.5 pt-1">
-        <div className="w-full h-2 bg-[#021d38] rounded-full overflow-hidden border border-cyan-500/20 p-[1px] shadow-inner">
-          <div
-            className="h-full rounded-full bg-gradient-to-r from-sky-500 via-cyan-400 to-cyan-300 shadow-[0_0_12px_#00d2ff] transition-all duration-700"
-            style={{ width: `${pctUsed}%` }}
-          />
+      {/* FEATURE 2: Target Allocation Budget Editor matching screenshot */}
+      <section className="bg-[#051c33]/70 border border-cyan-500/30 rounded-2xl p-4 shadow-lg backdrop-blur-md">
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-xs font-semibold uppercase tracking-wider text-cyan-300/80">
+            Target Allocation ({monthLabel})
+          </span>
+          <span className="text-xs text-cyan-300 font-bold">
+            {pctLeft}% capacity
+          </span>
         </div>
-        <div className="flex justify-between items-center text-sm font-semibold px-0.5">
-          <span className="text-cyan-200/90">{pctUsed}% used</span>
-          <span className="text-[#38bdf8] font-bold">{pctLeft}% remaining</span>
-        </div>
-      </section>
 
-      {/* FEATURE 2: Monthly Allocated Budget Card with Edit Button matching screenshot */}
-      <section className="bg-[#051c33]/90 border border-cyan-500/30 rounded-2xl p-4 shadow-[0_4px_20px_rgba(0,20,40,0.6)] backdrop-blur-md">
         {isEditingBudget ? (
-          <div className="space-y-2">
-            <div className="text-xs text-cyan-300 font-medium">Edit Monthly Allocated Budget</div>
-            <div className="flex items-center gap-2">
-              <span className="text-lg text-cyan-200 font-bold">₹</span>
+          <div className="mt-2 space-y-2">
+            <div className="flex items-center space-x-2">
+              <span className="text-cyan-300 font-bold text-base">₹</span>
               <input
                 type="number"
                 value={newBudgetVal}
                 onChange={(e) => setNewBudgetVal(e.target.value)}
                 autoFocus
-                className="flex-1 bg-black/50 border border-cyan-400/50 rounded-xl px-3 py-1.5 text-base font-bold text-white focus:outline-none focus:border-cyan-300"
+                className="flex-1 bg-[#021124] border border-cyan-400/50 rounded-xl px-3 py-1.5 text-base font-bold text-white focus:outline-none focus:border-cyan-300"
               />
               <button
                 type="button"
                 onClick={saveBudget}
-                className="px-3.5 py-1.5 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-xl text-xs font-bold text-white hover:brightness-110 active:scale-95 transition cursor-pointer"
+                className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 font-bold text-xs text-white shadow-md active:scale-95"
               >
                 Save
               </button>
               <button
                 type="button"
                 onClick={() => setIsEditingBudget(false)}
-                className="px-2 py-1.5 text-xs text-slate-400 hover:text-white"
+                className="px-3 py-1.5 rounded-xl bg-white/10 text-xs text-slate-300 hover:text-white"
               >
                 Cancel
               </button>
             </div>
+            <p className="text-[10px] text-cyan-200/70">
+              * Budget updates are securely saved to IndexedDB for {monthLabel} without modifying other months.
+            </p>
           </div>
         ) : (
-          <div className="flex items-center justify-between">
-            <div>
-              <span className="text-xs sm:text-[13px] font-medium text-cyan-300/80 block mb-1">
-                Monthly Allocated
-              </span>
-              <div className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
-                Budget: ₹{category.budget.toLocaleString()}
-              </div>
-            </div>
-
+          <div className="flex items-center justify-between mt-1">
+            <span className="text-2xl font-bold tracking-tight text-white">
+              ₹{category.budget.toLocaleString()}
+            </span>
             <button
               type="button"
               onClick={() => {
@@ -260,7 +293,7 @@ export const CategoryDetailScreen: React.FC<CategoryDetailScreenProps> = ({
         )}
       </section>
 
-      {/* FEATURE 3: Transactions Header with + Add Expense Button matching screenshot */}
+      {/* FEATURE 3: Transactions Header with + Add Expense Button */}
       <section className="space-y-3 pt-1">
         <div className="flex items-center justify-between px-1">
           <h3 className="text-base font-bold text-white tracking-tight">Transactions</h3>
@@ -277,7 +310,7 @@ export const CategoryDetailScreen: React.FC<CategoryDetailScreenProps> = ({
           </button>
         </div>
 
-        {/* FEATURE 4: Transaction Item Cards matching screenshot */}
+        {/* FEATURE 4: Transaction Item Cards with Edit & Delete */}
         <div className="space-y-2.5">
           {category.transactions && category.transactions.length > 0 ? (
             category.transactions.map((tx) => (
@@ -302,11 +335,27 @@ export const CategoryDetailScreen: React.FC<CategoryDetailScreenProps> = ({
                   </div>
                 </div>
 
-                {/* Right: Amount & Trash Icon */}
-                <div className="flex items-center space-x-2 shrink-0">
-                  <span className="text-base sm:text-lg font-bold text-white tracking-tight">
+                {/* Right: Amount & Action Icons (Edit & Delete) */}
+                <div className="flex items-center space-x-1 sm:space-x-2 shrink-0">
+                  <span className="text-base sm:text-lg font-bold text-white tracking-tight mr-1">
                     ₹{tx.amount.toLocaleString()}
                   </span>
+
+                  {/* Bug 1, 9, 10: Edit Button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (soundEnabled) playWaterDrop();
+                      handleOpenEditModal(tx);
+                    }}
+                    title="Edit transaction"
+                    aria-label="Edit transaction"
+                    className="text-cyan-400/80 hover:text-cyan-200 active:scale-90 transition-all p-1.5 flex items-center justify-center cursor-pointer rounded-lg hover:bg-cyan-500/15"
+                  >
+                    <span className="material-symbols-outlined text-lg">edit</span>
+                  </button>
+
+                  {/* Delete Button */}
                   <button
                     type="button"
                     onClick={() => {
@@ -315,7 +364,7 @@ export const CategoryDetailScreen: React.FC<CategoryDetailScreenProps> = ({
                     }}
                     title="Delete transaction"
                     aria-label="Delete transaction"
-                    className="text-cyan-400/80 hover:text-rose-400 active:scale-90 transition-all p-1.5 flex items-center justify-center cursor-pointer"
+                    className="text-cyan-400/80 hover:text-rose-400 active:scale-90 transition-all p-1.5 flex items-center justify-center cursor-pointer rounded-lg hover:bg-rose-500/15"
                   >
                     <span className="material-symbols-outlined text-lg">delete</span>
                   </button>
@@ -378,7 +427,7 @@ export const CategoryDetailScreen: React.FC<CategoryDetailScreenProps> = ({
                     type="number"
                     value={quickAmount}
                     onChange={(e) => setQuickAmount(e.target.value)}
-                    placeholder="e.g. 4000"
+                    placeholder="e.g. 300"
                     autoFocus
                     required
                     className="w-full bg-[#031426] border border-cyan-400/30 rounded-xl pl-8 pr-3 py-2 text-base font-bold text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
@@ -436,7 +485,7 @@ export const CategoryDetailScreen: React.FC<CategoryDetailScreenProps> = ({
               <div className="pt-2 flex items-center gap-2">
                 <button
                   type="submit"
-                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-[#00c6ff] to-[#0072ff] font-bold text-xs sm:text-sm text-white shadow-lg active:scale-98 transition"
+                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-[#00c6ff] to-[#0072ff] font-bold text-xs sm:text-sm text-white shadow-lg active:scale-98 transition cursor-pointer"
                 >
                   Save Expense
                 </button>
@@ -447,9 +496,155 @@ export const CategoryDetailScreen: React.FC<CategoryDetailScreenProps> = ({
                     onNavigate('add-expense');
                   }}
                   title="Use Clam Shell keypad"
-                  className="px-3 py-2.5 rounded-xl bg-cyan-950/80 border border-cyan-400/30 text-cyan-300 hover:text-white text-xs font-semibold"
+                  className="px-3 py-2.5 rounded-xl bg-cyan-950/80 border border-cyan-400/30 text-cyan-300 hover:text-white text-xs font-semibold cursor-pointer"
                 >
                   🐚 Keypad
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT EXPENSE MODAL (Bugs 1, 9, 10) */}
+      {showEditModal && editingTx && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-[#051c33] border border-cyan-400/50 w-full max-w-sm rounded-3xl p-5 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <span className="material-symbols-outlined text-cyan-400 text-xl">edit</span>
+                <h3 className="text-base font-bold text-white tracking-tight">
+                  Edit Expense
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowEditModal(false);
+                  setEditingTx(null);
+                }}
+                className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-slate-400 hover:text-white text-sm cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditedExpense} className="space-y-3.5">
+              {/* Amount Input */}
+              <div>
+                <label className="text-xs font-semibold text-cyan-300 block mb-1">
+                  Amount (₹)
+                </label>
+                <div className="relative flex items-center">
+                  <span className="absolute left-3 text-cyan-200 font-bold text-lg">₹</span>
+                  <input
+                    type="number"
+                    value={editAmount}
+                    onChange={(e) => setEditAmount(e.target.value)}
+                    autoFocus
+                    required
+                    className="w-full bg-[#031426] border border-cyan-400/30 rounded-xl pl-8 pr-3 py-2 text-base font-bold text-white focus:outline-none focus:border-cyan-400"
+                  />
+                </div>
+              </div>
+
+              {/* Category Selector (Allows moving expense across categories) */}
+              <div>
+                <label className="text-xs font-semibold text-cyan-300 block mb-1">
+                  Category
+                </label>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {categories.map((cat) => {
+                    const isSelected = editCategoryId === cat.id;
+                    return (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => setEditCategoryId(cat.id)}
+                        className={`py-1.5 px-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 transition ${
+                          isSelected
+                            ? 'bg-cyan-500/30 border border-cyan-400 text-white font-bold'
+                            : 'bg-[#031426] border border-cyan-500/20 text-slate-300 hover:bg-white/5'
+                        }`}
+                      >
+                        <span className="text-sm">{cat.icon}</span>
+                        <span className="truncate">{cat.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Date Input (Allows moving expense across months) */}
+              <div>
+                <label className="text-xs font-semibold text-cyan-300 block mb-1">
+                  Expense Date
+                </label>
+                <input
+                  type="date"
+                  value={editDate}
+                  onChange={(e) => setEditDate(e.target.value)}
+                  className="w-full bg-[#031426] border border-cyan-400/30 rounded-xl px-3 py-2 text-xs font-semibold text-white focus:outline-none focus:border-cyan-400 cursor-pointer"
+                />
+                <p className="text-[10px] text-cyan-200/60 mt-1">
+                  * Changing the date moves this expense to that month's history.
+                </p>
+              </div>
+
+              {/* Note / Description */}
+              <div>
+                <label className="text-xs font-semibold text-cyan-300 block mb-1">
+                  Description / Note
+                </label>
+                <input
+                  type="text"
+                  value={editNote}
+                  onChange={(e) => setEditNote(e.target.value)}
+                  placeholder="Expense description"
+                  className="w-full bg-[#031426] border border-cyan-400/30 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-400"
+                />
+              </div>
+
+              {/* Payment Mode */}
+              <div>
+                <label className="text-xs font-semibold text-cyan-300 block mb-1">
+                  Payment Mode
+                </label>
+                <div className="grid grid-cols-4 gap-2">
+                  {['UPI', 'Cash', 'Card', 'Bank'].map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => setEditMode(mode)}
+                      className={`py-1.5 rounded-xl text-xs font-semibold transition ${
+                        editMode === mode
+                          ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-md'
+                          : 'bg-[#031426] border border-cyan-400/20 text-slate-300 hover:bg-white/5'
+                      }`}
+                    >
+                      {mode}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="pt-2 flex items-center gap-2">
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-[#00c6ff] to-[#0072ff] font-bold text-xs sm:text-sm text-white shadow-lg active:scale-98 transition cursor-pointer"
+                >
+                  Save Changes
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditModal(false);
+                    setEditingTx(null);
+                  }}
+                  className="px-4 py-2.5 rounded-xl bg-white/10 text-slate-300 hover:text-white text-xs font-semibold cursor-pointer"
+                >
+                  Cancel
                 </button>
               </div>
             </form>
