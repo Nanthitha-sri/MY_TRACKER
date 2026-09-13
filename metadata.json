@@ -1,0 +1,6 @@
+{
+  "name": "Good Day - Ocean Budget Tracker",
+  "description": "An ocean-inspired mindful budget and expense tracker featuring water-filled 3D glass jars, calm beach aesthetics, expense logging, and category insights.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
