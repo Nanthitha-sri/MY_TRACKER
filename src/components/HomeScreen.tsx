@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Category, ScreenType } from '../types';
 import { BottomNav } from './BottomNav';
-import { audioManager } from '../utils/audio';
+import { playWaterDrop } from '../utils/audio';
 import {
   parseYearMonth,
   getMonthDisplayName,
@@ -18,7 +18,7 @@ interface HomeScreenProps {
   onSelectMonth: (year: number, month: number) => void;
   onNavigate: (screen: ScreenType) => void;
   onSelectCategory: (catId: string) => void;
-  soundEnabled?: boolean;
+  soundEnabled: boolean;
 }
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({
@@ -42,7 +42,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   const monthStatus = getMonthStatus(activeYear, activeMonth);
 
   const handleCategoryClick = (catId: string) => {
-    audioManager.play('waterRipple');
+    if (soundEnabled) playWaterDrop();
     onSelectCategory(catId);
   };
 
@@ -99,7 +99,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  audioManager.play('monthChange');
+                  if (soundEnabled) playWaterDrop();
                   const prev = getPreviousMonth(activeYear, activeMonth);
                   onSelectMonth(prev.year, prev.month);
                 }}
@@ -113,10 +113,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               {/* Month Trigger */}
               <button
                 type="button"
-                onClick={() => {
-                  audioManager.play('buttonTap');
-                  setShowMonthDropdown(!showMonthDropdown);
-                }}
+                onClick={() => setShowMonthDropdown(!showMonthDropdown)}
                 className="inline-flex items-center space-x-1.5 px-2.5 py-1.5 rounded-full bg-[#0d2a4d]/90 border border-cyan-500/30 text-xs font-medium text-cyan-100 backdrop-blur-md shadow-sm hover:border-cyan-400 active:scale-95 transition cursor-pointer"
               >
                 <span>{currentMonthLabel}</span>
@@ -133,7 +130,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  audioManager.play('monthChange');
+                  if (soundEnabled) playWaterDrop();
                   const next = getNextMonth(activeYear, activeMonth);
                   onSelectMonth(next.year, next.month);
                 }}
@@ -148,7 +145,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  audioManager.play('buttonTap');
+                  if (soundEnabled) playWaterDrop();
                   onNavigate('month-history');
                 }}
                 title="Open Month History"
@@ -180,24 +177,24 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                     <button
                       type="button"
                       onClick={() => {
-                        audioManager.play('monthChange');
+                        if (soundEnabled) playWaterDrop();
                         const prev = getPreviousMonth(activeYear, activeMonth);
                         onSelectMonth(prev.year, prev.month);
                         setShowMonthDropdown(false);
                       }}
-                      className="px-2 py-1 rounded text-[10px] font-semibold bg-[#072445] text-cyan-200 hover:bg-cyan-500/20 text-center cursor-pointer"
+                      className="px-2 py-1 rounded text-[10px] font-semibold bg-[#072445] text-cyan-200 hover:bg-cyan-500/20 text-center"
                     >
                       ← Previous
                     </button>
                     <button
                       type="button"
                       onClick={() => {
-                        audioManager.play('monthChange');
+                        if (soundEnabled) playWaterDrop();
                         const next = getNextMonth(activeYear, activeMonth);
                         onSelectMonth(next.year, next.month);
                         setShowMonthDropdown(false);
                       }}
-                      className="px-2 py-1 rounded text-[10px] font-semibold bg-[#072445] text-cyan-200 hover:bg-cyan-500/20 text-center cursor-pointer"
+                      className="px-2 py-1 rounded text-[10px] font-semibold bg-[#072445] text-cyan-200 hover:bg-cyan-500/20 text-center"
                     >
                       Next →
                     </button>
@@ -214,11 +211,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                           key={ym}
                           type="button"
                           onClick={() => {
-                            audioManager.play('monthChange');
+                            if (soundEnabled) playWaterDrop();
                             onSelectMonth(year, month);
                             setShowMonthDropdown(false);
                           }}
-                          className={`w-full text-left px-3 py-2 text-xs transition flex items-center justify-between cursor-pointer ${
+                          className={`w-full text-left px-3 py-2 text-xs transition flex items-center justify-between ${
                             isCurrent
                               ? 'bg-cyan-500/20 text-cyan-200 font-bold'
                               : 'text-slate-200 hover:bg-white/10'
@@ -241,10 +238,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                     type="button"
                     onClick={() => {
                       setShowMonthDropdown(false);
-                      audioManager.play('buttonTap');
+                      if (soundEnabled) playWaterDrop();
                       onNavigate('month-history');
                     }}
-                    className="w-full text-left px-3 py-2 text-xs text-cyan-300 hover:bg-cyan-500/20 font-bold flex items-center justify-between cursor-pointer"
+                    className="w-full text-left px-3 py-2 text-xs text-cyan-300 hover:bg-cyan-500/20 font-bold flex items-center justify-between"
                   >
                     <span>View All Months</span>
                     <span>→</span>

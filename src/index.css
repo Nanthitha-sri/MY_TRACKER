@@ -58,7 +58,7 @@ body {
 }
 
 .water-fill {
-  background: linear-gradient(180deg, rgba(53, 208, 255, 0.55) 0%, rgba(0, 119, 210, 0.75) 50%, rgba(1, 48, 100, 0.9) 100%);
+  background: linear-gradient(180deg, rgba(53, 208, 255, 0.38) 0%, rgba(0, 119, 210, 0.55) 50%, rgba(1, 48, 100, 0.75) 100%);
   position: absolute;
   bottom: 0;
   left: 0;

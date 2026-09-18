@@ -202,10 +202,16 @@ export const CategoryDetailScreen: React.FC<CategoryDetailScreenProps> = ({
         <div className="flex flex-col items-center">
           <CategoryVisualizer
             categoryId={category.id}
-            percentageUsed={pctUsed}
+            pctLeft={pctLeft}
             percentageLeft={pctLeft}
+            percentageUsed={pctUsed}
             spent={category.spent}
             budget={category.budget}
+            size="lg"
+            image={category.image}
+            badgeImg={category.badgeImg}
+            creatureImg={category.creatureImg}
+            icon={category.icon}
           />
         </div>
 
